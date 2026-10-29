@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useSheetNavigation } from "@/hooks/useSheetNavigation";
 import { MCP_CREDENTIAL_STATUS_COLORS, MCP_STATUS_COLORS } from "@/lib/constants/config";
+import { getMCPClientAccessGrants, useMCPClientAccessGrantCount } from "@/lib/registries/mcpClientAccessGrants";
 import { useGetCoreConfigQuery, useGetMCPSessionsQuery, useGetVirtualMCPsQuery } from "@/lib/store";
 import { MCPClient, MCPClientTool } from "@/lib/types/mcp";
 import { MCPSessionStatus } from "@/lib/types/mcpSessions";
@@ -24,6 +25,7 @@ import { Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DefinitionList, DefinitionRow, MCPClientCredentialSection } from "./mcpClientCredentialSection";
 import {
+	accessExplanation,
 	accessStat,
 	alertFor,
 	allowedToolsBadges,
@@ -54,6 +56,7 @@ import { MCPExposeList } from "./mcpExposeList";
 import { promptExposeItems, resourceExposeItems } from "./mcpExposeList.utils";
 import { MCPToolIconImage } from "./mcpToolIcon";
 import { SectionHeader } from "./sectionHeader";
+import "@enterprise/lib/registrations/mcpClientAccessGrants";
 
 type DetailsTab = "overview" | "tools" | "callers" | "prompts" | "resources" | "access";
 type ToolFilter = "all" | "enabled" | "auto" | "off";
@@ -163,6 +166,16 @@ export default function MCPClientDetailsSheet({
 	}, [virtualMcpsData, config.client_id]);
 	const virtualMcpCount: VirtualMcpCount = virtualMcpsLoading ? "loading" : virtualMcpsError ? "error" : memberVirtualMcps.length;
 	const vkConfigs = mcpClient.vk_configs ?? [];
+	// Grants a downstream build adds beside keys and Virtual MCPs; none in the base build.
+	const accessGrants = getMCPClientAccessGrants();
+	const AccessGrantsSection = accessGrants?.Section;
+	// undefined while a registered kind of grant is still counting; the base build registers none.
+	const accessGrantCount = useMCPClientAccessGrantCount(config.client_id);
+	// The Access tab's count waits, like its figure, for the Virtual MCPs and any grants being counted.
+	const accessCount =
+		typeof virtualMcpCount !== "number" || (accessGrants && accessGrantCount === undefined)
+			? undefined
+			: vkConfigs.length + (accessGrantCount ?? 0) + virtualMcpCount;
 
 	// Callers: per-user OAuth and per-user headers servers store a row per
 	// caller. One one-row page per status gives the counts; a short page gives
@@ -197,7 +210,11 @@ export default function MCPClientDetailsSheet({
 	const toolsStat = toolStat(mcpClient);
 	const stats = [
 		{ key: "tools", label: t("registry.sheet.tabTools"), ...toolsStat },
-		{ key: "access", label: t("registry.columns.access"), ...accessStat(config, vkConfigs.length, virtualMcpCount) },
+		{
+			key: "access",
+			label: t("registry.columns.access"),
+			...accessStat(config, vkConfigs.length, virtualMcpCount, accessGrants && { count: accessGrantCount, labels: accessGrants.labels() }),
+		},
 		...(hasCallers ? [{ key: "callers", label: t("registry.view.callers"), value: callers.value, sub: callers.sub }] : []),
 	];
 
@@ -348,8 +365,7 @@ export default function MCPClientDetailsSheet({
 									{t("registry.sheet.resourcesTitle")} <TabCount n={resourceItems.length} />
 								</TabsTrigger>
 								<TabsTrigger value="access" data-testid="mcpclient-view-tab-access">
-									{t("registry.columns.access")}{" "}
-									<TabCount n={typeof virtualMcpCount === "number" ? vkConfigs.length + virtualMcpCount : undefined} />
+									{t("registry.columns.access")} <TabCount n={accessCount} />
 								</TabsTrigger>
 							</TabsList>
 						</div>
@@ -615,7 +631,7 @@ export default function MCPClientDetailsSheet({
 							<div className="flex items-start justify-between gap-4 rounded-md border p-4" data-testid="mcpclient-view-allow-by-default">
 								<SectionHeader
 									title={t("registry.sheet.allowByDefault")}
-									description={config.allow_by_default ? t("registry.view.allowByDefaultOnDesc") : t("registry.view.allowByDefaultOffDesc")}
+									description={accessExplanation(!!config.allow_by_default, accessGrants?.labels())}
 								/>
 								<Badge className={config.allow_by_default ? MCP_STATUS_COLORS.healthy : OFF_BADGE}>
 									{config.allow_by_default ? t("registry.view.on") : t("registry.view.off")}
@@ -649,6 +665,8 @@ export default function MCPClientDetailsSheet({
 									<EmptyBox>{config.allow_by_default ? t("registry.view.noVkOverrides") : t("registry.sheet.noVkAccess")}</EmptyBox>
 								)}
 							</div>
+
+							{AccessGrantsSection && <AccessGrantsSection mcpClientId={config.client_id} active={tab === "access"} />}
 
 							<div className="space-y-3">
 								<SectionHeader title={t("registry.sheet.virtualMcpsSection")} description={t("registry.sheet.virtualMcpsSectionDesc")} />
