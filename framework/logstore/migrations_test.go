@@ -1362,3 +1362,34 @@ func TestIsPassthroughMigrationRollbackKeepsMarker(t *testing.T) {
 	require.NoError(t, db.First(&row, "id = ?", "typed-passthrough").Error)
 	require.True(t, row.IsPassthrough)
 }
+
+// TestClientIPColumnsMigration pins logs_add_client_ip_columns: existing tables gain both columns, a rerun is a no-op, and rollback drops them.
+func TestClientIPColumnsMigration(t *testing.T) {
+	ctx := context.Background()
+	store, err := newSqliteLogStore(ctx, &SQLiteConfig{Path: filepath.Join(t.TempDir(), "client-ip.db")}, testLogger{})
+	require.NoError(t, err)
+	db := store.db
+	columns := []string{"client_ip", "forwarded_for"}
+	for _, model := range clientIPColumnModels {
+		for _, column := range columns {
+			require.True(t, db.Migrator().HasColumn(model, column), "%T.%s is created", model, column)
+			require.NoError(t, db.Migrator().DropColumn(model, column))
+		}
+	}
+	require.NoError(t, db.Exec("DELETE FROM migrations WHERE id = ?", "logs_add_client_ip_columns").Error)
+	require.NoError(t, migrationAddClientIPColumns(ctx, db, testLogger{}))
+	for _, model := range clientIPColumnModels {
+		for _, column := range columns {
+			assert.True(t, db.Migrator().HasColumn(model, column), "%T.%s is added to an existing table", model, column)
+		}
+	}
+	require.NoError(t, db.Exec("DELETE FROM migrations WHERE id = ?", "logs_add_client_ip_columns").Error)
+	require.NoError(t, migrationAddClientIPColumns(ctx, db, testLogger{}), "a rerun over existing columns succeeds")
+
+	require.NoError(t, clientIPColumnsMigration(ctx, testLogger{}).Rollback(db))
+	for _, model := range clientIPColumnModels {
+		for _, column := range columns {
+			assert.False(t, db.Migrator().HasColumn(model, column), "%T.%s is dropped on rollback", model, column)
+		}
+	}
+}

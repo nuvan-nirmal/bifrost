@@ -348,6 +348,7 @@ var logstoreMigrationSteps = []migrationStep{
 	{IDs: []string{"mcp_tool_logs_add_method_column"}, run: migrationAddMethodColumnToMCPToolLogs},
 	{IDs: []string{"add_relay_logs_table"}, run: migrationCreateRelayLogsTable},
 	{IDs: []string{"relay_logs_add_object_columns"}, run: migrationAddRelayLogObjectColumns},
+	{IDs: []string{"logs_add_client_ip_columns"}, run: migrationAddClientIPColumns},
 }
 
 // areThereAnyPendingMigrations returns true if there are any pending migrations to be applied.
@@ -6021,4 +6022,36 @@ func migrationAddRelayLogObjectColumns(ctx context.Context, db *gorm.DB, logger 
 		},
 	}})
 	return m.Migrate()
+}
+
+// clientIPColumnModels are the log tables that carry client_ip and forwarded_for.
+var clientIPColumnModels = []any{&Log{}, &MCPToolLog{}, &RelayLog{}}
+
+// migrationAddClientIPColumns adds client_ip and forwarded_for to logs, mcp_tool_logs and relay_logs.
+func migrationAddClientIPColumns(ctx context.Context, db *gorm.DB, logger schemas.Logger) error {
+	opts := *migrator.DefaultOptions
+	opts.UseTransaction = true
+	return migrator.New(db, &opts, []*migrator.Migration{clientIPColumnsMigration(ctx, logger)}).Migrate()
+}
+
+func clientIPColumnsMigration(ctx context.Context, logger schemas.Logger) *migrator.Migration {
+	eachColumn := func(tx *gorm.DB, apply func(*gorm.DB, schemas.Logger, interface{}, string) error) error {
+		tx = tx.WithContext(ctx)
+		if err := boundDDLLockWait(tx); err != nil {
+			return err
+		}
+		for _, model := range clientIPColumnModels {
+			for _, field := range []string{"ClientIP", "ForwardedFor"} {
+				if err := apply(tx, logger, model, field); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	return &migrator.Migration{
+		ID:       "logs_add_client_ip_columns",
+		Migrate:  func(tx *gorm.DB) error { return eachColumn(tx, addColumnIfNotExists) },
+		Rollback: func(tx *gorm.DB) error { return eachColumn(tx, dropColumnIfExists) },
+	}
 }
