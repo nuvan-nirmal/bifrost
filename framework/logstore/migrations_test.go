@@ -1393,3 +1393,27 @@ func TestClientIPColumnsMigration(t *testing.T) {
 		}
 	}
 }
+
+// TestUserEmailColumnMigration pins logs_add_user_email_column: existing tables gain user_email, a rerun is a no-op, and rollback drops it.
+func TestUserEmailColumnMigration(t *testing.T) {
+	ctx := context.Background()
+	store, err := newSqliteLogStore(ctx, &SQLiteConfig{Path: filepath.Join(t.TempDir(), "user-email.db")}, testLogger{})
+	require.NoError(t, err)
+	db := store.db
+	for _, model := range userEmailColumnModels {
+		require.True(t, db.Migrator().HasColumn(model, "user_email"), "%T.user_email is created", model)
+		require.NoError(t, db.Migrator().DropColumn(model, "user_email"))
+	}
+	require.NoError(t, db.Exec("DELETE FROM migrations WHERE id = ?", "logs_add_user_email_column").Error)
+	require.NoError(t, migrationAddUserEmailColumn(ctx, db, testLogger{}))
+	for _, model := range userEmailColumnModels {
+		assert.True(t, db.Migrator().HasColumn(model, "user_email"), "%T.user_email is added to an existing table", model)
+	}
+	require.NoError(t, db.Exec("DELETE FROM migrations WHERE id = ?", "logs_add_user_email_column").Error)
+	require.NoError(t, migrationAddUserEmailColumn(ctx, db, testLogger{}), "a rerun over existing columns succeeds")
+
+	require.NoError(t, userEmailColumnMigration(ctx, testLogger{}).Rollback(db))
+	for _, model := range userEmailColumnModels {
+		assert.False(t, db.Migrator().HasColumn(model, "user_email"), "%T.user_email is dropped on rollback", model)
+	}
+}
