@@ -42,6 +42,10 @@ type CountersSnapshot struct {
 	// SessionRequests counts requests per session id, which distinguishes one
 	// long-lived connection from many short ones without inspecting sockets.
 	SessionRequests map[string]int64 `json:"session_requests"`
+	// MethodsByIdentity counts every JSON-RPC method by the identity that
+	// sent it, identity first, so a test can prove which credential a
+	// discovery used. Requests from no identity are only in Methods.
+	MethodsByIdentity map[string]map[string]int64 `json:"methods_by_identity"`
 }
 
 // TotalCalls sums Calls across every tool.
@@ -76,10 +80,11 @@ func newCounters() *Counters {
 
 func newSnapshot() CountersSnapshot {
 	return CountersSnapshot{
-		Calls:           map[string]int64{},
-		CallsByIdentity: map[string]int64{},
-		Methods:         map[string]int64{},
-		SessionRequests: map[string]int64{},
+		Calls:             map[string]int64{},
+		CallsByIdentity:   map[string]int64{},
+		Methods:           map[string]int64{},
+		SessionRequests:   map[string]int64{},
+		MethodsByIdentity: map[string]map[string]int64{},
 	}
 }
 
@@ -101,11 +106,17 @@ func (c *Counters) session() {
 	c.mu.Unlock()
 }
 
-func (c *Counters) method(m, sessionID string) {
+func (c *Counters) method(m, sessionID, identity string) {
 	c.mu.Lock()
 	c.d.Methods[m]++
 	if sessionID != "" {
 		c.d.SessionRequests[sessionID]++
+	}
+	if identity != "" {
+		if c.d.MethodsByIdentity[identity] == nil {
+			c.d.MethodsByIdentity[identity] = map[string]int64{}
+		}
+		c.d.MethodsByIdentity[identity][m]++
 	}
 	c.mu.Unlock()
 }
@@ -163,6 +174,10 @@ func (c *Counters) Snapshot() CountersSnapshot {
 	out.CallsByIdentity = copyCounts(c.d.CallsByIdentity)
 	out.Methods = copyCounts(c.d.Methods)
 	out.SessionRequests = copyCounts(c.d.SessionRequests)
+	out.MethodsByIdentity = make(map[string]map[string]int64, len(c.d.MethodsByIdentity))
+	for identity, methods := range c.d.MethodsByIdentity {
+		out.MethodsByIdentity[identity] = copyCounts(methods)
+	}
 	return out
 }
 

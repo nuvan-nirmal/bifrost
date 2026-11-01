@@ -25,6 +25,10 @@ type Tool struct {
 	// destructive, or send a hint a client does not know yet.
 	Annotations json.RawMessage `json:"annotations,omitempty"`
 
+	// OutputSchema is sent verbatim. A tool that has one, and no reply of its
+	// own, answers a call with structuredContent as well as text.
+	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
+
 	// Reply is the CallToolResult tools/call returns for this tool when
 	// nothing is faulted, sent verbatim so a scenario can return several
 	// content blocks, structuredContent or isError. Empty means an echo of
@@ -44,15 +48,16 @@ type Tool struct {
 
 // wireTool is the part of a Tool that tools/list sends.
 type wireTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
-	Annotations json.RawMessage `json:"annotations,omitempty"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	InputSchema  json.RawMessage `json:"inputSchema"`
+	Annotations  json.RawMessage `json:"annotations,omitempty"`
+	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
 }
 
 // wire returns the client-visible view of t.
 func (t Tool) wire() wireTool {
-	return wireTool{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema, Annotations: t.Annotations}
+	return wireTool{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema, Annotations: t.Annotations, OutputSchema: t.OutputSchema}
 }
 
 // Validate rejects a definition that would otherwise misbehave quietly:
@@ -66,8 +71,14 @@ func (t Tool) Validate() error {
 	if !isObjectOrEmpty(t.Reply) {
 		return fmt.Errorf("tool %q: reply must be a JSON object (a CallToolResult)", t.Name)
 	}
+	if !isObjectOrEmpty(t.OutputSchema) {
+		return fmt.Errorf("tool %q: outputSchema must be a JSON object", t.Name)
+	}
 	if len(t.Reply) > 0 && t.ReplyEnv != "" {
 		return fmt.Errorf("tool %q: reply and reply_env are exclusive", t.Name)
+	}
+	if hasJSON(t.OutputSchema) && t.ReplyEnv != "" {
+		return fmt.Errorf("tool %q: reply_env answers text only, so it cannot honour an outputSchema", t.Name)
 	}
 	if t.Fault != nil {
 		if err := t.Fault.validateForTool(); err != nil {
@@ -75,6 +86,12 @@ func (t Tool) Validate() error {
 		}
 	}
 	return nil
+}
+
+// hasJSON reports whether raw holds a value other than null.
+func hasJSON(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) > 0 && string(trimmed) != "null"
 }
 
 // isObjectOrEmpty reports whether raw is absent, null or a JSON object. Callers
@@ -126,6 +143,9 @@ func normalize(t Tool) *Tool {
 	}
 	if string(bytes.TrimSpace(t.Reply)) == "null" {
 		t.Reply = nil
+	}
+	if string(bytes.TrimSpace(t.OutputSchema)) == "null" {
+		t.OutputSchema = nil
 	}
 	if len(t.InputSchema) == 0 {
 		t.InputSchema = defaultInputSchema
@@ -244,6 +264,25 @@ func (ts *toolSet) view(identity string) map[string]*Tool {
 		}
 	}
 	return ts.base
+}
+
+// views returns every overlay as sorted lists, nil when there are none.
+func (ts *toolSet) views() map[string][]Tool {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	if len(ts.overlays) == 0 {
+		return nil
+	}
+	out := make(map[string][]Tool, len(ts.overlays))
+	for identity, overlay := range ts.overlays {
+		list := make([]Tool, 0, len(overlay))
+		for _, t := range overlay {
+			list = append(list, *t)
+		}
+		sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
+		out[identity] = list
+	}
+	return out
 }
 
 // List returns the tools visible to identity, sorted by name so a client that

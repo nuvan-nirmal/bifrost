@@ -17,6 +17,10 @@ const (
 	CodeMethodNotFound = -32601
 	CodeInvalidParams  = -32602
 	CodeInternalError  = -32603
+
+	// CodeResourceNotFound is MCP's answer to a resources/read for a uri the
+	// server does not hold.
+	CodeResourceNotFound = -32002
 )
 
 // MCP method names this mock understands. Anything else answers
@@ -27,6 +31,12 @@ const (
 	MethodPing        = "ping"
 	MethodToolsList   = "tools/list"
 	MethodToolsCall   = "tools/call"
+
+	MethodPromptsList   = "prompts/list"
+	MethodPromptsGet    = "prompts/get"
+	MethodResourcesList = "resources/list"
+	MethodTemplatesList = "resources/templates/list"
+	MethodResourcesRead = "resources/read"
 )
 
 // NotificationToolListChanged is the server-to-client notification announcing

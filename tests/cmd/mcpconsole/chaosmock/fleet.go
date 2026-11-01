@@ -3,6 +3,7 @@ package chaosmock
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -80,6 +81,19 @@ type Seed struct {
 	// LLMModels is what the LLM surface's model listings answer; empty keeps
 	// the default.
 	LLMModels []string `json:"llm_models,omitempty"`
+
+	// Prompts, Resources and Templates are the base lists, and the *Views
+	// fields the per-identity overlays, as the matching control verbs set.
+	Prompts       []Prompt                      `json:"prompts,omitempty"`
+	PromptViews   map[string][]Prompt           `json:"prompt_views,omitempty"`
+	Resources     []Resource                    `json:"resources,omitempty"`
+	ResourceViews map[string][]Resource         `json:"resource_views,omitempty"`
+	Templates     []ResourceTemplate            `json:"templates,omitempty"`
+	TemplateViews map[string][]ResourceTemplate `json:"template_views,omitempty"`
+	// IdentityInstructions and IdentityFaults replace the server-wide
+	// instructions and faults for one identity.
+	IdentityInstructions map[string]string `json:"identity_instructions,omitempty"`
+	IdentityFaults       map[string]Faults `json:"identity_faults,omitempty"`
 }
 
 // Validate applies the control API's checks to a seed, so a seed file with a
@@ -101,8 +115,43 @@ func (sd Seed) Validate() error {
 			return err
 		}
 	}
+	for identity := range sd.IdentityFaults {
+		if identity == "" {
+			return fmt.Errorf("identity_faults needs an identity for every set")
+		}
+	}
+	for identity, text := range sd.IdentityInstructions {
+		if identity == "" || text == "" {
+			return fmt.Errorf("identity_instructions needs an identity and text for every entry")
+		}
+	}
+	if err := validateViews(newPromptCatalog(), sd.Prompts, sd.PromptViews); err != nil {
+		return err
+	}
+	if err := validateViews(newResourceCatalog(), sd.Resources, sd.ResourceViews); err != nil {
+		return err
+	}
+	if err := validateViews(newTemplateCatalog(), sd.Templates, sd.TemplateViews); err != nil {
+		return err
+	}
 	if sd.Auth != nil && sd.Auth.OAuth != nil {
 		return sd.Auth.OAuth.validate()
+	}
+	return nil
+}
+
+// validateViews applies a catalog's checks to a base list and every overlay.
+func validateViews[T validator](c *catalog[T], base []T, views map[string][]T) error {
+	if err := c.validate(base); err != nil {
+		return err
+	}
+	for identity, view := range views {
+		if identity == "" {
+			return fmt.Errorf("a %s view needs an identity", c.kind)
+		}
+		if err := c.validate(view); err != nil {
+			return fmt.Errorf("%s view for %q: %w", c.kind, identity, err)
+		}
 	}
 	return nil
 }
@@ -120,10 +169,28 @@ func (f *Fleet) AddSeeded(name string, seed Seed) *Server {
 	if seed.Faults != nil {
 		s.SetFaults(*seed.Faults)
 	}
+	for identity, own := range seed.IdentityFaults {
+		s.SetIdentityFaults(identity, own)
+	}
 	s.SetInstructions(seed.Instructions)
+	for identity, text := range seed.IdentityInstructions {
+		s.SetIdentityInstructions(identity, text)
+	}
 	s.rest.set(seed.Routes)
 	if len(seed.LLMModels) > 0 {
 		s.llm.setModels(seed.LLMModels)
+	}
+	s.prompts.set(seed.Prompts)
+	for identity, view := range seed.PromptViews {
+		s.prompts.setOverlay(identity, view)
+	}
+	s.resources.set(seed.Resources)
+	for identity, view := range seed.ResourceViews {
+		s.resources.setOverlay(identity, view)
+	}
+	s.templates.set(seed.Templates)
+	for identity, view := range seed.TemplateViews {
+		s.templates.setOverlay(identity, view)
 	}
 	f.mu.Lock()
 	f.seeds[name] = seed
@@ -144,6 +211,7 @@ func (f *Fleet) Reset(name string) (*Server, bool) {
 	}
 	if old != nil {
 		old.DropStreams()
+		old.ReleaseGates()
 	}
 	return f.AddSeeded(name, seed), true
 }
@@ -165,6 +233,7 @@ func (f *Fleet) Remove(name string) bool {
 	f.mu.Unlock()
 	if ok {
 		s.DropStreams()
+		s.ReleaseGates()
 	}
 	return ok
 }
@@ -215,6 +284,7 @@ func (f *Fleet) Serve(addr string) (string, func(context.Context) error, error) 
 		f.mu.RLock()
 		for _, s := range f.servers {
 			s.DropStreams()
+			s.ReleaseGates()
 		}
 		f.mu.RUnlock()
 		return srv.Shutdown(ctx)
@@ -226,6 +296,7 @@ func (f *Fleet) Stop() {
 	f.mu.RLock()
 	for _, s := range f.servers {
 		s.DropStreams()
+		s.ReleaseGates()
 	}
 	f.mu.RUnlock()
 	if f.ts != nil {

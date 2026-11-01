@@ -44,6 +44,22 @@ type State struct {
 	REST *RESTState `json:"rest,omitempty"`
 	// LLM is the LLM surface's models and scenarios, present once used.
 	LLM *LLMState `json:"llm,omitempty"`
+
+	// Views, PromptViews, ResourceViews and TemplateViews are the
+	// per-identity overlays, keyed by identity.
+	Views         map[string][]Tool             `json:"views,omitempty"`
+	Prompts       []Prompt                      `json:"prompts,omitempty"`
+	PromptViews   map[string][]Prompt           `json:"prompt_views,omitempty"`
+	Resources     []Resource                    `json:"resources,omitempty"`
+	ResourceViews map[string][]Resource         `json:"resource_views,omitempty"`
+	Templates     []ResourceTemplate            `json:"templates,omitempty"`
+	TemplateViews map[string][]ResourceTemplate `json:"template_views,omitempty"`
+	// IdentityInstructions and IdentityFaults replace the server-wide
+	// instructions and faults for one caller.
+	IdentityInstructions map[string]string `json:"identity_instructions,omitempty"`
+	IdentityFaults       map[string]Faults `json:"identity_faults,omitempty"`
+	// Gates are the barriers set on this server, sorted by name.
+	Gates []GateState `json:"gates,omitempty"`
 }
 
 // State captures a server's current state.
@@ -67,6 +83,18 @@ func (s *Server) State() State {
 		OAuth:        oauth,
 		REST:         s.rest.snapshot(),
 		LLM:          s.llm.snapshot(),
+
+		Views:         s.tools.views(),
+		Prompts:       s.prompts.list(""),
+		PromptViews:   s.prompts.views(),
+		Resources:     s.resources.list(""),
+		ResourceViews: s.resources.views(),
+		Templates:     s.templates.list(""),
+		TemplateViews: s.templates.views(),
+
+		IdentityInstructions: s.IdentityInstructions(),
+		IdentityFaults:       s.faults.identities(),
+		Gates:                s.gates.snapshot(),
 	}
 }
 
@@ -182,6 +210,13 @@ type controlBody struct {
 	Turns    []LLMTurn `json:"turns,omitempty"`
 	Then     *LLMTurn  `json:"then,omitempty"`
 	Models   []string  `json:"models,omitempty"`
+	// Prompts, Resources and Templates drive the prompts/*, resources/* and
+	// templates/* verbs.
+	Prompts   []Prompt           `json:"prompts,omitempty"`
+	Resources []Resource         `json:"resources,omitempty"`
+	Templates []ResourceTemplate `json:"templates,omitempty"`
+	// Gate is the gate gates/set adds; gates/open and gates/clear take Name.
+	Gate *Gate `json:"gate,omitempty"`
 }
 
 func (s *Server) applyControl(verb string, r *http.Request) error {
@@ -230,11 +265,24 @@ func (s *Server) applyControl(verb string, r *http.Request) error {
 			}
 			s.tools.SetOverlay(body.Identity, tools)
 		}
+	case "prompts/set", "prompts/overlay":
+		return applyCatalogControl(s.prompts, strings.HasSuffix(strings.TrimSuffix(verb, "/"), "overlay"), body.Prompts, body)
+	case "resources/set", "resources/overlay":
+		return applyCatalogControl(s.resources, strings.HasSuffix(strings.TrimSuffix(verb, "/"), "overlay"), body.Resources, body)
+	case "templates/set", "templates/overlay":
+		return applyCatalogControl(s.templates, strings.HasSuffix(strings.TrimSuffix(verb, "/"), "overlay"), body.Templates, body)
 	case "instructions":
 		// An empty body is refused rather than read as "clear", since a
 		// scenario that misspelled the text field would otherwise silently
-		// serve no instructions.
+		// serve no instructions. With an identity the verb sets or clears
+		// that identity's own text, and clearing text it never had is refused.
 		switch {
+		case body.Identity != "" && body.Clear:
+			if !s.ClearIdentityInstructions(body.Identity) {
+				return errBadRequest(fmt.Sprintf("%q has no instructions of its own to clear", body.Identity))
+			}
+		case body.Identity != "" && body.Text != "":
+			s.SetIdentityInstructions(body.Identity, body.Text)
 		case body.Clear:
 			s.SetInstructions("")
 		case body.Text != "":
@@ -247,6 +295,35 @@ func (s *Server) applyControl(verb string, r *http.Request) error {
 			return errBadRequest("faults body is required")
 		}
 		s.faults.set(*body.Faults)
+	case "faults/identity":
+		switch {
+		case body.Identity == "":
+			return errBadRequest("faults/identity needs an identity")
+		case body.Clear:
+			if !s.faults.clearIdentity(body.Identity) {
+				return errBadRequest(fmt.Sprintf("%q has no faults of its own to clear", body.Identity))
+			}
+		case body.Faults == nil:
+			return errBadRequest("faults/identity takes faults, or clear to remove them")
+		default:
+			s.faults.setIdentity(body.Identity, *body.Faults)
+		}
+	case "gates/set":
+		if body.Gate == nil {
+			return errBadRequest("gate body is required")
+		}
+		if err := body.Gate.Validate(); err != nil {
+			return errBadRequest(err.Error())
+		}
+		s.gates.set(*body.Gate)
+	case "gates/open":
+		if err := s.gates.openGate(body.Name); err != nil {
+			return errBadRequest(err.Error())
+		}
+	case "gates/clear":
+		if err := s.gates.remove(body.Name); err != nil {
+			return errBadRequest(err.Error())
+		}
 	case "faults/clear":
 		s.faults.clear()
 		s.oauth.clearFails()
