@@ -595,6 +595,28 @@ export function MCPLogDetailSheet({
 											</div>
 										}
 									/>
+									{displayLog.client_ip && (
+										<LogEntryDetailsView
+											className="w-full"
+											label={t("labels.clientIp")}
+											value={
+												<span className="font-mono" data-testid="mcplogdetails-client-ip">
+													{displayLog.client_ip}
+												</span>
+											}
+										/>
+									)}
+									{displayLog.forwarded_for && (
+										<LogEntryDetailsView
+											className="w-full"
+											label={t("labels.forwardedFor")}
+											value={
+												<span className="font-mono" data-testid="mcplogdetails-forwarded-for">
+													{displayLog.forwarded_for}
+												</span>
+											}
+										/>
+									)}
 									<LogEntryDetailsView
 										className="w-full"
 										label={t("mcpLogs.detail.toolName")}

@@ -22,6 +22,8 @@
 		"provider": "Provider",
 		"model": "Model",
 		"app": "App",
+		"clientIp": "Client IP",
+		"forwardedFor": "Forwarded For",
 		"server": "Server",
 		"toolName": "Tool Name",
 		"serviceTier": "Service Tier",

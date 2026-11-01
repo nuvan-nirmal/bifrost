@@ -31,6 +31,8 @@ const sampleLog: RelayLog = {
 	units: 125,
 	billed_units: 125,
 	user_agent: "curl/8.0",
+	client_ip: "10.0.0.5",
+	forwarded_for: "203.0.113.7",
 	virtual_key_id: "vk-1",
 	virtual_key_name: "prod",
 	team_id: "team-1",
@@ -49,6 +51,8 @@ describe("relayLogsToCSV", () => {
 		expect(row[RELAY_LOGS_CSV_HEADERS.indexOf("Request ID")]).toBe(sampleLog.request_id);
 		expect(row[RELAY_LOGS_CSV_HEADERS.indexOf("Cost ($)")]).toBe(0.0125);
 		expect(row).toHaveLength(RELAY_LOGS_CSV_HEADERS.length);
+		expect(row[RELAY_LOGS_CSV_HEADERS.indexOf("Client IP")]).toBe("10.0.0.5");
+		expect(row[RELAY_LOGS_CSV_HEADERS.indexOf("Forwarded For")]).toBe("203.0.113.7");
 		expect(row[RELAY_LOGS_CSV_HEADERS.indexOf("Relay")]).toBe("voice");
 		expect(row[RELAY_LOGS_CSV_HEADERS.indexOf("Status")]).toBe("success");
 		// The HTTP code stays in the detail sheet; the export carries the status only, as the LLM export does.

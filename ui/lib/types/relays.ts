@@ -267,6 +267,8 @@ export interface RelayLog {
 	project_id?: string;
 	project_name?: string;
 	user_agent?: string; // Raw HTTP User-Agent of the calling client
+	client_ip?: string; // TCP peer IP of the caller
+	forwarded_for?: string; // Leftmost X-Forwarded-For or X-Real-IP; caller-controlled
 	app?: string; // Backend-detected client app derived from user_agent
 	request_id: string;
 	metadata?: Record<string, unknown>; // logging headers, x-bf-lh-* labels, x-bf-dim-* dimensions and the key's metadata, as on LLM and MCP rows

@@ -1437,6 +1437,28 @@ export function LogDetailView({
 										}
 									/>
 								)}
+								{log.client_ip && (
+									<LogEntryDetailsView
+										className="w-full"
+										label={t("labels.clientIp")}
+										value={
+											<span className="font-mono" data-testid="logdetails-client-ip">
+												{log.client_ip}
+											</span>
+										}
+									/>
+								)}
+								{log.forwarded_for && (
+									<LogEntryDetailsView
+										className="w-full"
+										label={t("labels.forwardedFor")}
+										value={
+											<span className="font-mono" data-testid="logdetails-forwarded-for">
+												{log.forwarded_for}
+											</span>
+										}
+									/>
+								)}
 								<LogEntryDetailsView
 									className="w-full"
 									label={t("labels.type")}
