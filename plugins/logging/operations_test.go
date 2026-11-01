@@ -5701,6 +5701,8 @@ func TestRelayLogRow(t *testing.T) {
 	ctx.SetValue(schemas.BifrostContextKeyUserAgent, "claude-code/1.0.0")
 	ctx.SetValue(schemas.BifrostContextKeyClientIP, "10.0.0.5")
 	ctx.SetValue(schemas.BifrostContextKeyForwardedFor, "203.0.113.5")
+	ctx.SetValue(schemas.BifrostContextKeyUserID, "user-5")
+	ctx.SetValue(schemas.BifrostContextKeyUserEmail, "grace@example.com")
 
 	_, _, err := plugin.PreRelayHook(ctx, &schemas.BifrostRelayRequest{
 		RelayName: "tavily", Method: "POST", Path: "/search", RawQuery: "q=1", RoutePath: "/search", Billable: true,
@@ -5731,6 +5733,7 @@ func TestRelayLogRow(t *testing.T) {
 	require.Equal(t, "claude-code/1.0.0", *entry.UserAgent)
 	require.Equal(t, "10.0.0.5", *entry.ClientIP)
 	require.Equal(t, "203.0.113.5", *entry.ForwardedFor)
+	require.Equal(t, "grace@example.com", *entry.UserEmail)
 	require.Equal(t, `{"query":"x"}`, *entry.RequestBody)
 	require.Nil(t, entry.RequestHeadersParsed, "headers are kept only when the logging headers or the route's matchers name them")
 
@@ -6128,6 +6131,8 @@ func clientIPTestContext(requestID string) *schemas.BifrostContext {
 	ctx.SetValue(schemas.BifrostContextKeyRequestID, requestID)
 	ctx.SetValue(schemas.BifrostContextKeyClientIP, "2001:db8::1")
 	ctx.SetValue(schemas.BifrostContextKeyForwardedFor, "203.0.113.7")
+	ctx.SetValue(schemas.BifrostContextKeyUserID, "user-1")
+	ctx.SetValue(schemas.BifrostContextKeyUserEmail, "ada@example.com")
 	return ctx
 }
 
@@ -6173,6 +6178,10 @@ func TestLLMLogsPersistClientIP(t *testing.T) {
 		require.NoError(t, err, id)
 		requireClientIP(t, entry.ClientIP, entry.ForwardedFor)
 	}
+	entry, err := store.FindByID(context.Background(), "req-client-ip")
+	require.NoError(t, err)
+	require.NotNil(t, entry.UserEmail, "the completed LLM row records the user email")
+	require.Equal(t, "ada@example.com", *entry.UserEmail)
 }
 
 // TestMCPLogsPersistClientIP drives PreMCPHook/PostMCPHook; the row carries the caller's IPs.
@@ -6200,6 +6209,8 @@ func TestMCPLogsPersistClientIP(t *testing.T) {
 	entry, err := store.FindMCPToolLog(context.Background(), "mcp-client-ip")
 	require.NoError(t, err)
 	requireClientIP(t, entry.ClientIP, entry.ForwardedFor)
+	require.NotNil(t, entry.UserEmail)
+	require.Equal(t, "ada@example.com", *entry.UserEmail)
 }
 
 // TestClientIPFromContextClampsToColumns keeps an oversized forwarded header from failing the insert.

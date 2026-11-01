@@ -83,6 +83,10 @@ LogEntry:
       type: string
       description: Raw opaque Bifrost session ID resolved at ingress for key stickiness and request correlation.
       nullable: true
+    user_email:
+      type: string
+      description: Email of the user the request was attributed to, recorded at request time. Set by enterprise governance for user sessions and for virtual keys assigned to a user.
+      nullable: true
     client_ip:
       type: string
       description: TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address.
@@ -298,6 +302,10 @@ MCPToolLogEntry:
     virtual_key_name:
       type: string
       description: Name of the virtual key used for this tool execution
+    user_email:
+      type: string
+      description: Email of the user the request was attributed to, recorded at request time. Set by enterprise governance for user sessions and for virtual keys assigned to a user.
+      nullable: true
     client_ip:
       type: string
       description: TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address.
