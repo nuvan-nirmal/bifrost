@@ -48,6 +48,13 @@ const mcpDialTimeout = 10 * time.Second
 // observable by plugins. Credential-resolution errors (including
 // *MCPUserOAuthRequiredError) surface from this method without opening any
 // connection.
+//
+// A per-call connection dials with the stored credential, so an upstream that
+// revoked or expired it early answers initialize with 401, before any tool has
+// run. For an auth type with a credential to refresh, that refreshes it and
+// dials once more: nothing was executed, so the retry is safe whatever the
+// tool. A refresh that fails leaves the credential needing reauthorization,
+// which the second resolution reports as such.
 func (m *MCPManager) AcquireClientConn(ctx *schemas.BifrostContext, state *schemas.MCPClientState) (*client.Client, func(), error) {
 	conn, release, _, err := m.acquireClientConn(ctx, state)
 	return conn, release, err
@@ -55,8 +62,36 @@ func (m *MCPManager) AcquireClientConn(ctx *schemas.BifrostContext, state *schem
 
 // acquireClientConn is AcquireClientConn that also returns the instructions the
 // upstream's initialize answered with on a per-call connection, which a caller's
-// discovery keeps; "" on a shared connection.
+// discovery keeps; "" on a shared connection. A caller's connect discovers
+// through it too, so a credential its upstream rejects is refreshed there as well.
 func (m *MCPManager) acquireClientConn(ctx *schemas.BifrostContext, state *schemas.MCPClientState) (*client.Client, func(), string, error) {
+	conn, release, instructions, err := m.dialClientConn(ctx, state)
+	if err == nil || !isAuthFailure(err) || !refreshesOnConnectRejection(m.credStore, state.ExecutionConfig) {
+		return conn, release, instructions, err
+	}
+	if refreshErr := m.credStore.ForceRefresh(ctx, state.ExecutionConfig); refreshErr != nil {
+		m.logger.Debug("%s Refreshing the credential of MCP client %s after its connection was rejected failed: %v", MCPLogPrefix, state.ExecutionConfig.Name, refreshErr)
+	}
+	return m.dialClientConn(ctx, state)
+}
+
+// refreshesOnConnectRejection reports whether a per-call connection rejected with
+// 401 is worth a credential refresh and a second dial: only the auth types whose
+// credential a refresh can replace.
+func refreshesOnConnectRejection(credStore schemas.MCPCredentialStore, config *schemas.MCPClientConfig) bool {
+	if config == nil || !credStore.RequiresPerCallConnection(config) {
+		return false
+	}
+	switch config.AuthType {
+	case schemas.MCPAuthTypePerUserOauth, schemas.MCPAuthTypeTokenExchange, schemas.MCPAuthTypeOauth:
+		return true
+	}
+	return false
+}
+
+// dialClientConn is acquireClientConn without the refresh-and-redial on a
+// rejected per-call connection.
+func (m *MCPManager) dialClientConn(ctx *schemas.BifrostContext, state *schemas.MCPClientState) (*client.Client, func(), string, error) {
 	if state == nil || state.ExecutionConfig == nil {
 		return nil, nil, "", fmt.Errorf("client state is required")
 	}
@@ -273,6 +308,11 @@ func (m *MCPManager) acquireClientConn(ctx *schemas.BifrostContext, state *schem
 			return nil, nil, "", authRequiredErr
 		}
 		if gateErr.Error != nil {
+			// The dial's own error when no plugin rewrote it, so its type survives: an
+			// upstream 401 is what acquireClientConn refreshes the credential for.
+			if gateErr.Error.Error != nil && gateErr.Error.Message == gateErr.Error.Error.Error() {
+				return nil, nil, "", gateErr.Error.Error
+			}
 			return nil, nil, "", fmt.Errorf("%s", gateErr.Error.Message)
 		}
 		return nil, nil, "", fmt.Errorf("ephemeral connection setup failed for %s", config.Name)

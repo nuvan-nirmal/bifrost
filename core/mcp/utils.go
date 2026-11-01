@@ -606,8 +606,8 @@ func isAuthRequiredError(err error) bool {
 	return errors.Is(err, transport.ErrAuthorizationRequired) || errors.Is(err, transport.ErrOAuthAuthorizationRequired)
 }
 
-// isAuthFailure reports whether a tool-call error is an upstream auth rejection: mcp-go's typed
-// 401 first, then the error text for rejections that reach us only as text.
+// isAuthFailure reports whether a tool call's or a per-call handshake's error is an upstream auth
+// rejection: mcp-go's typed 401 first, then the error text for rejections that reach us only as text.
 func isAuthFailure(err error) bool {
 	return err != nil && (isAuthRequiredError(err) || isAuthFailureErrorText(err.Error()))
 }

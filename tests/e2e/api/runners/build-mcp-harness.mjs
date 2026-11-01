@@ -4739,6 +4739,27 @@ const AUTH36 = folder("AUTH-36 Per-user lazy refresh", `Setup: ${PU_TEXT(false)}
   restoreConfig("AUTH-36"),
 ]);
 
+const AUTH51 = folder("AUTH-51 Per-user token revoked before it expires", `Setup: ${PU_TEXT(false)}; ${PU_SERVER_TEXT("auth51")}, verified as admin; auth51-sess1 completes as alice and makes one call. Then the authorization server revokes alice's grant while her access token is still within its lifetime, so the upstream rejects it at the handshake.`, [
+  ...puConfig("AUTH-51", false),
+  ...puConnect("AUTH-51", "auth51"),
+  execTool("AUTH-51", "setup: execute as auth51-sess1 opens a flow", "auth51-echo_tool", [A.status(400), keepFlow("auth51_f")], { session: "auth51-sess1" }),
+  ...puFinish("AUTH-51", "auth51_f", "alice", "the flow"),
+  execTool("AUTH-51", "setup: execute as auth51-sess1", "auth51-echo_tool", [A.status(200)], { session: "auth51-sess1" }),
+  mockPost("AUTH-51", "auth51", "oauth/revoke", "setup: the authorization server revokes alice's grant", { identity: "alice" }),
+  execTool("AUTH-51", "execute as auth51-sess1 asks it to sign in again", "auth51-echo_tool", [A.status(400), authFlow("auth51", {}), keepFlow("auth51_f2", "auth51_f")], { session: "auth51-sess1" }),
+  mockGet("AUTH-51", "auth51", "one refresh, refused invalid_grant, and the revoked token reached no tool", [A.custom("one refresh_token request, answered 400 invalid_grant", [
+    "var r = pm.response.json().oauth.log.filter(function (e) { return e.grant_type === 'refresh_token'; });",
+    "pm.expect(r.length, 'log: ' + JSON.stringify(pm.response.json().oauth.log)).to.equal(1);",
+    "pm.expect([r[0].status, r[0].error]).to.eql([400, 'invalid_grant']);",
+  ]), identityCalls("alice", 1)]),
+  sessionsHas("AUTH-51", "auth51-sess1's session needs reauth", "auth51-u", `${sessionPred("auth51-sess1")} && s.status === 'needs_reauth'`, "auth51-sess1's entry has status needs_reauth"),
+  ...puFinish("AUTH-51", "auth51_f2", "alice", "the new flow"),
+  execTool("AUTH-51", "execute as auth51-sess1 after signing in again", "auth51-echo_tool", [A.status(200)], { session: "auth51-sess1" }),
+  mockGet("AUTH-51", "auth51", "alice's second call ran", [identityCalls("alice", 2)]),
+  deleteClient("AUTH-51", "auth51-u"),
+  restoreConfig("AUTH-51"),
+]);
+
 const gwFlow = (id, title, tool, vk, v, withToken) => request(id, title, "POST", "/mcp", {
   noAuth: true, raw: JSON.stringify(call(tool, { text: "hi" })), headers: [MCP_ACCEPT, { key: "x-bf-vk", value: `{{${vk}}}` }],
   asserts: [A.status(200), A.custom(`isError true and the text links a flow${withToken ? " with a #t= temp token" : ""}`, [
@@ -9122,7 +9143,7 @@ const collection = {
   ],
   item: [
     section("ADM Client admin", "Client admin tests.", [ADM01, ADM02, ADM03, ADM04, ADM05, ADM06, ADM07, ADM08, ADM10, ADM11, ADM12, ADM13, ADM14, ADM16, ADM17, ADM18, ADM19, ADM20, ADM21, ADM22, ADM23, ADM24, ADM25, ADM27, ADM28, ADM29, ADM30, ADM31, ADM32, ADM33, ADM34, ADM35, ADM37, ADM38, ADM39, ADM40, ADM41, ADM42, ADM43, ADM44, ADM45, ADM46, ADM47, ADM50, ADM51, ADM52, ADM53, ADM54, ADM55, ADM56, ADM57, ADM58, ADM59, ADM60, ADM61, ADM62, ADM63, ADM65, ADM66, ADM67, ADM68, ADM69, ADM70, ADM71, ADM72, ADM73, ADM74, ADM75, ADM76, ADM77, ADM78, ADM80, ADM81, ADM82, ADM83, ADM86]),
-    section("AUTH Upstream auth", "Upstream auth tests.", [AUTH01, AUTH02, AUTH03, AUTH05, AUTH06, AUTH07, AUTH08, AUTH09, AUTH10, AUTH11, AUTH12, AUTH13, AUTH14, AUTH15, AUTH16, AUTH17, AUTH18, AUTH19, AUTH20, AUTH21, AUTH23, AUTH24, AUTH25, AUTH27, AUTH28, AUTH29, AUTH30, AUTH31, AUTH32, AUTH33, AUTH34, AUTH35, AUTH36, AUTH39, AUTH40, AUTH41, AUTH42, AUTH43, AUTH44, AUTH45, AUTH46, AUTH48, AUTH49, AUTH50]),
+    section("AUTH Upstream auth", "Upstream auth tests.", [AUTH01, AUTH02, AUTH03, AUTH05, AUTH06, AUTH07, AUTH08, AUTH09, AUTH10, AUTH11, AUTH12, AUTH13, AUTH14, AUTH15, AUTH16, AUTH17, AUTH18, AUTH19, AUTH20, AUTH21, AUTH23, AUTH24, AUTH25, AUTH27, AUTH28, AUTH29, AUTH30, AUTH31, AUTH32, AUTH33, AUTH34, AUTH35, AUTH36, AUTH39, AUTH40, AUTH41, AUTH42, AUTH43, AUTH44, AUTH45, AUTH46, AUTH48, AUTH49, AUTH50, AUTH51]),
     section("CONN Connection types", "Connection type tests.", [CONN01, CONN02, CONN03, CONN04, CONN05, CONN06, CONN07, CONN08, CONN09, CONN10, CONN11, CONN12, CONN16, CONN17, CONN18, CONN20, CONN22, CONN23, CONN24, CONN25, CONN27]),
     section("EP Bifrost MCP endpoint", "Bifrost MCP endpoint tests.", [EP01, EP02, EP03, EP04, EP05, EP06, EP07, EP08, EP09, EP11, EP12, EP13, EP14, EP15, EP16, EP17, EP18, EP19, EP20, EP21, EP22, EP23, EP24, EP25, EP26, EP27, EP28, EP29, EP30, EP31, EP32, EP33, EP34, EP35, EP36, EP37, EP38, EP39, EP40, EP41, EP42, EP43, EP44, EP45, EP46, EP47, EP48, EP49, EP50, EP51, EP52, EP53, EP54]),
     section("OAS Bifrost OAuth server", "Bifrost OAuth server tests.", [OAS01, OAS02, OAS03, OAS05, OAS06, OAS07, OAS08, OAS09, OAS10, OAS11, OAS12, OAS13, OAS14, OAS15, OAS16, OAS17, OAS18, OAS19, OAS20, OAS21, OAS23, OAS25, OAS27, OAS28, OAS29, OAS30, OAS31, OAS32, OAS33, OAS34, OAS35, OAS36, OAS38, OAS40, OAS42]),
