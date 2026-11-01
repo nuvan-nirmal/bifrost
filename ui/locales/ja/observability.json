@@ -24,6 +24,7 @@
 		"app": "アプリ",
 		"clientIp": "クライアント IP",
 		"forwardedFor": "転送元",
+		"userEmail": "ユーザーのメールアドレス",
 		"server": "サーバー",
 		"toolName": "ツール名",
 		"serviceTier": "サービス層",

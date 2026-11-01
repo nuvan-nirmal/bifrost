@@ -24,6 +24,7 @@
 		"app": "Приложение",
 		"clientIp": "IP клиента",
 		"forwardedFor": "Перенаправлено для",
+		"userEmail": "Email пользователя",
 		"server": "Сервер",
 		"toolName": "Имя инструмента",
 		"serviceTier": "Уровень сервиса",

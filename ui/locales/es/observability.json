@@ -24,6 +24,7 @@
 		"app": "Aplicación",
 		"clientIp": "IP del cliente",
 		"forwardedFor": "Reenviado para",
+		"userEmail": "Correo del usuario",
 		"server": "Servidor",
 		"toolName": "Nombre de la herramienta",
 		"serviceTier": "Servicio Tier",

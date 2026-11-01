@@ -1711,6 +1711,13 @@ export function LogDetailView({
 										}
 									/>
 								)}
+								{log.user_email && (
+									<LogEntryDetailsView
+										className="w-full"
+										label={t("labels.userEmail")}
+										value={<span data-testid="logdetails-user-email">{log.user_email}</span>}
+									/>
+								)}
 								{log.fallback_index > 0 && (
 									<LogEntryDetailsView className="w-full" label={t("logs.detail.fallbackIndex")} value={log.fallback_index} />
 								)}

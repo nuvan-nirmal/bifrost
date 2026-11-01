@@ -42,6 +42,7 @@ describe("logsExport", () => {
 		project_name: "Search V2",
 		client_ip: "10.0.0.5",
 		forwarded_for: "203.0.113.7",
+		user_email: "ada@example.com",
 		error_details: undefined,
 		number_of_retries: 0,
 		fallback_index: 0,
@@ -51,19 +52,21 @@ describe("logsExport", () => {
 		responses_input_history: [],
 	};
 
-	it("exports 25 predefined headers", () => {
-		expect(LOGS_CSV_HEADERS).toHaveLength(25);
+	it("exports 26 predefined headers", () => {
+		expect(LOGS_CSV_HEADERS).toHaveLength(26);
 		expect(LOGS_CSV_HEADERS[0]).toBe("Time");
 		expect(LOGS_CSV_HEADERS[1]).toBe("Request ID");
 		expect(LOGS_CSV_HEADERS[12]).toBe("Cost ($)");
 		expect(LOGS_CSV_HEADERS[22]).toBe("Stop Reason");
 		expect(LOGS_CSV_HEADERS[23]).toBe("Client IP");
 		expect(LOGS_CSV_HEADERS[24]).toBe("Forwarded For");
+		expect(LOGS_CSV_HEADERS[25]).toBe("User Email");
 	});
 
 	it("converts a complete LogEntry to CSV row cells", () => {
 		const row = logEntryToCSVRow(mockLog);
-		expect(row).toHaveLength(25);
+		expect(row).toHaveLength(26);
+		expect(row[25]).toBe("ada@example.com");
 		expect(row[23]).toBe("10.0.0.5");
 		expect(row[24]).toBe("203.0.113.7");
 		expect(row[0]).toBe("2026-10-15T12:00:00Z");
@@ -107,7 +110,8 @@ describe("logsExport", () => {
 		};
 
 		const row = logEntryToCSVRow(minimalLog);
-		expect(row).toHaveLength(25);
+		expect(row).toHaveLength(26);
+		expect(row[25]).toBe(""); // user email
 		expect(row[23]).toBe(""); // client ip
 		expect(row[24]).toBe(""); // forwarded for
 		expect(row[2]).toBe("error");

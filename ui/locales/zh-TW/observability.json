@@ -24,6 +24,7 @@
 		"app": "應用",
 		"clientIp": "用戶端 IP",
 		"forwardedFor": "轉送來源",
+		"userEmail": "使用者電子郵件",
 		"server": "伺服器",
 		"toolName": "工具名稱",
 		"serviceTier": "服務層級",
