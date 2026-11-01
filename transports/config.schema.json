@@ -4080,6 +4080,11 @@
           "type": "integer",
           "minimum": 0,
           "description": "Days to retain log entries. 0 disables retention-based cleanup."
+        },
+        "capture_client_ip": {
+          "type": "boolean",
+          "default": false,
+          "description": "Record the caller's IP on LLM, MCP and relay logs: client_ip (the TCP peer) and forwarded_for (leftmost X-Forwarded-For, else X-Real-IP). Off by default, which leaves both fields empty in the logs database and in object storage. Takes effect on restart."
         }
       },
       "additionalProperties": false

@@ -58,7 +58,7 @@ func (p *LoggerPlugin) PreRelayHook(ctx *schemas.BifrostContext, req *schemas.Bi
 			entry.App = &app
 		}
 	}
-	clientIP, forwardedFor := clientIPFromContext(ctx)
+	clientIP, forwardedFor := p.clientIPFromContext(ctx)
 	entry.ClientIP, entry.ForwardedFor = optionalString(clientIP), optionalString(forwardedFor)
 	// The same metadata LLM and MCP rows carry: the configured logging headers, every x-bf-lh-*
 	// label, the x-bf-dim-* dimensions, and the virtual key's metadata on top.

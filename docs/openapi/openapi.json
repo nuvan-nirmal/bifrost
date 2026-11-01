@@ -96970,12 +96970,12 @@
                           },
                           "client_ip": {
                             "type": "string",
-                            "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address.",
+                            "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address. Recorded only when `logs_store.capture_client_ip` is true.",
                             "nullable": true
                           },
                           "forwarded_for": {
                             "type": "string",
-                            "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified.",
+                            "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified. Recorded only when `logs_store.capture_client_ip` is true.",
                             "nullable": true
                           },
                           "arguments": {
@@ -97274,12 +97274,12 @@
                     },
                     "client_ip": {
                       "type": "string",
-                      "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address.",
+                      "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address. Recorded only when `logs_store.capture_client_ip` is true.",
                       "nullable": true
                     },
                     "forwarded_for": {
                       "type": "string",
-                      "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified.",
+                      "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified. Recorded only when `logs_store.capture_client_ip` is true.",
                       "nullable": true
                     },
                     "arguments": {
@@ -140702,12 +140702,12 @@
           },
           "client_ip": {
             "type": "string",
-            "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address.",
+            "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address. Recorded only when `logs_store.capture_client_ip` is true.",
             "nullable": true
           },
           "forwarded_for": {
             "type": "string",
-            "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified.",
+            "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified. Recorded only when `logs_store.capture_client_ip` is true.",
             "nullable": true
           },
           "child_count": {
@@ -146076,12 +146076,12 @@
           },
           "client_ip": {
             "type": "string",
-            "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address.",
+            "description": "TCP peer IP of the caller as seen by Bifrost. Behind a proxy this is the proxy's address. Recorded only when `logs_store.capture_client_ip` is true.",
             "nullable": true
           },
           "forwarded_for": {
             "type": "string",
-            "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified.",
+            "description": "Leftmost `X-Forwarded-For` entry, or `X-Real-IP` when that header is absent. Sent by the caller and not verified. Recorded only when `logs_store.capture_client_ip` is true.",
             "nullable": true
           },
           "request_id": {

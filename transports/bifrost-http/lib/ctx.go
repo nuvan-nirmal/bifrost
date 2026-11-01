@@ -864,11 +864,13 @@ func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, store HandlerStore) (*sch
 	})
 	bifrostCtx.SetValue(schemas.BifrostContextKeyRequestHeaders, allHeaders)
 
-	if ip := ctx.RemoteIP(); ip != nil && !ip.IsUnspecified() {
-		bifrostCtx.SetValue(schemas.BifrostContextKeyClientIP, ip.String())
-	}
-	if forwarded := ClientForwardedIP(ctx); forwarded != "" {
-		bifrostCtx.SetValue(schemas.BifrostContextKeyForwardedFor, forwarded)
+	if store != nil && store.ShouldCaptureClientIP() {
+		if ip := ctx.RemoteIP(); ip != nil && !ip.IsUnspecified() {
+			bifrostCtx.SetValue(schemas.BifrostContextKeyClientIP, ip.String())
+		}
+		if forwarded := ClientForwardedIP(ctx); forwarded != "" {
+			bifrostCtx.SetValue(schemas.BifrostContextKeyForwardedFor, forwarded)
+		}
 	}
 
 	// Session stickiness: an explicit x-bf-session-id wins, otherwise the

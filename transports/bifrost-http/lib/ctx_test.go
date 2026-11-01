@@ -40,6 +40,7 @@ type testHandlerStore struct {
 	matcher              *HeaderMatcher
 	allowDirectKeys      bool
 	extraFieldsInHeaders bool
+	captureClientIP      bool
 }
 
 func (s testHandlerStore) GetHeaderMatcher() *HeaderMatcher                      { return s.matcher }
@@ -55,6 +56,7 @@ func (s testHandlerStore) ShouldAllowPerRequestStorageOverride() bool      { ret
 func (s testHandlerStore) ShouldAllowPerRequestRawOverride() bool          { return false }
 func (s testHandlerStore) ShouldAllowDirectKeys() bool                     { return s.allowDirectKeys }
 func (s testHandlerStore) ShouldSendExtraFieldsInHeaders() bool            { return s.extraFieldsInHeaders }
+func (s testHandlerStore) ShouldCaptureClientIP() bool                     { return s.captureClientIP }
 func (s testHandlerStore) IsProviderConfigured(schemas.ModelProvider) bool { return false }
 func (s testHandlerStore) GetMCPExternalServerURL() string                 { return "" }
 func (s testHandlerStore) GetMCPExternalClientURL() string                 { return "" }
@@ -133,7 +135,7 @@ func TestConvertToBifrostContext_ClientIP(t *testing.T) {
 			for k, v := range tt.headers {
 				ctx.Request.Header.Set(k, v)
 			}
-			bifrostCtx, cancel := ConvertToBifrostContext(ctx, testHandlerStore{})
+			bifrostCtx, cancel := ConvertToBifrostContext(ctx, testHandlerStore{captureClientIP: true})
 			defer cancel()
 			if got, _ := bifrostCtx.Value(schemas.BifrostContextKeyClientIP).(string); got != tt.wantClientIP {
 				t.Errorf("client ip = %q, want %q", got, tt.wantClientIP)
@@ -142,6 +144,24 @@ func TestConvertToBifrostContext_ClientIP(t *testing.T) {
 				t.Errorf("forwarded for = %q, want %q", got, tt.wantForwarded)
 			}
 		})
+	}
+}
+
+// TestConvertToBifrostContext_ClientIPOffByDefault records neither IP unless logs_store.capture_client_ip is on.
+func TestConvertToBifrostContext_ClientIPOffByDefault(t *testing.T) {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.SetRemoteAddr(&net.TCPAddr{IP: net.ParseIP("10.1.2.3"), Port: 5000})
+	ctx.Request.Header.Set("X-Forwarded-For", "203.0.113.7")
+	bifrostCtx, cancel := ConvertToBifrostContext(ctx, testHandlerStore{})
+	defer cancel()
+	if got := bifrostCtx.Value(schemas.BifrostContextKeyClientIP); got != nil {
+		t.Errorf("client ip = %v, want unset", got)
+	}
+	if got := bifrostCtx.Value(schemas.BifrostContextKeyForwardedFor); got != nil {
+		t.Errorf("forwarded for = %v, want unset", got)
+	}
+	if !(&Config{LogsStoreConfig: &logstore.Config{CaptureClientIP: true}}).ShouldCaptureClientIP() || (&Config{}).ShouldCaptureClientIP() {
+		t.Error("ShouldCaptureClientIP must follow logs_store.capture_client_ip")
 	}
 }
 
@@ -1012,17 +1032,22 @@ func BenchmarkConvertToBifrostContextVirtualKeyHeader(b *testing.B) {
 	}
 }
 
-// BenchmarkConvertToBifrostContextClientIP measures a request from a real peer behind a proxy, the path that records client_ip and forwarded_for.
+// BenchmarkConvertToBifrostContextClientIP measures a request from a real peer behind a proxy, with capture off (the default) and on.
 func BenchmarkConvertToBifrostContextClientIP(b *testing.B) {
-	ctx := &fasthttp.RequestCtx{}
-	ctx.SetRemoteAddr(&net.TCPAddr{IP: net.ParseIP("10.1.2.3"), Port: 5000})
-	ctx.Request.Header.Set("Content-Type", "application/json")
-	ctx.Request.Header.Set("User-Agent", "OpenAI/Python 2.8.1")
-	ctx.Request.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
-	b.ReportAllocs()
-	for b.Loop() {
-		_, cancel := ConvertToBifrostContext(ctx, testHandlerStore{})
-		cancel()
+	for _, capture := range []bool{false, true} {
+		b.Run(fmt.Sprintf("capture=%t", capture), func(b *testing.B) {
+			ctx := &fasthttp.RequestCtx{}
+			ctx.SetRemoteAddr(&net.TCPAddr{IP: net.ParseIP("10.1.2.3"), Port: 5000})
+			ctx.Request.Header.Set("Content-Type", "application/json")
+			ctx.Request.Header.Set("User-Agent", "OpenAI/Python 2.8.1")
+			ctx.Request.Header.Set("X-Forwarded-For", "203.0.113.7, 10.0.0.1")
+			store := testHandlerStore{captureClientIP: capture}
+			b.ReportAllocs()
+			for b.Loop() {
+				_, cancel := ConvertToBifrostContext(ctx, store)
+				cancel()
+			}
+		})
 	}
 }
 

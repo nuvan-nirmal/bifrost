@@ -5692,6 +5692,7 @@ func (s *endpointJobStore) UpsertProviderJob(_ context.Context, job *cstables.Ta
 
 func TestRelayLogRow(t *testing.T) {
 	plugin := policyTestPlugin(nil, nil, true)
+	plugin.captureClientIP = true
 	plugin.writeQueue = make(chan *writeQueueEntry, 4)
 	ctx := policyCtx(false, nil)
 	ctx.SetValue(schemas.BifrostContextKeyRequestID, "req-pte")
@@ -6157,7 +6158,7 @@ func requireClientIP(t *testing.T, clientIP, forwardedFor *string) {
 // TestLLMLogsPersistClientIP drives PreLLMHook/PostLLMHook and the no-pending error path; both rows carry the caller's IPs.
 func TestLLMLogsPersistClientIP(t *testing.T) {
 	store := newTestStore(t)
-	plugin, err := Init(context.Background(), &Config{}, testLogger{}, store, nil, nil, nil)
+	plugin, err := Init(context.Background(), &Config{CaptureClientIP: true}, testLogger{}, store, nil, nil, nil)
 	require.NoError(t, err)
 
 	ctx := clientIPTestContext("req-client-ip")
@@ -6187,7 +6188,7 @@ func TestLLMLogsPersistClientIP(t *testing.T) {
 // TestMCPLogsPersistClientIP drives PreMCPHook/PostMCPHook; the row carries the caller's IPs.
 func TestMCPLogsPersistClientIP(t *testing.T) {
 	store := newTestStore(t)
-	plugin, err := Init(context.Background(), &Config{}, testLogger{}, store, nil, nil, nil)
+	plugin, err := Init(context.Background(), &Config{CaptureClientIP: true}, testLogger{}, store, nil, nil, nil)
 	require.NoError(t, err)
 
 	ctx := clientIPTestContext("req-mcp-client-ip")
@@ -6217,8 +6218,72 @@ func TestMCPLogsPersistClientIP(t *testing.T) {
 func TestClientIPFromContextClampsToColumns(t *testing.T) {
 	ctx := schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 	ctx.SetValue(schemas.BifrostContextKeyForwardedFor, strings.Repeat("9", maxPersistedForwardedForLen+10))
-	clientIP, forwardedFor := clientIPFromContext(ctx)
+	clientIP, forwardedFor := (&LoggerPlugin{captureClientIP: true}).clientIPFromContext(ctx)
 	require.Empty(t, clientIP)
 	require.Len(t, forwardedFor, maxPersistedForwardedForLen)
 	require.Nil(t, optionalString(clientIP), "an absent IP stays NULL")
+}
+
+// TestClientIPCaptureOffByDefault leaves client_ip and forwarded_for NULL on LLM, MCP and relay rows unless logs_store.capture_client_ip is set; user email is still recorded.
+func TestClientIPCaptureOffByDefault(t *testing.T) {
+	store := newTestStore(t)
+	plugin, err := Init(context.Background(), &Config{}, testLogger{}, store, nil, nil, nil)
+	require.NoError(t, err)
+
+	ctx := clientIPTestContext("req-client-ip-off")
+	_, _, err = plugin.PreLLMHook(ctx, &schemas.BifrostRequest{
+		RequestType: schemas.ChatCompletionRequest,
+		ChatRequest: &schemas.BifrostChatRequest{Provider: schemas.OpenAI, Model: "gpt-4o", Params: &schemas.ChatParameters{}},
+	})
+	require.NoError(t, err)
+	_, _, err = plugin.PostLLMHook(ctx, nil, clientIPTestError())
+	require.NoError(t, err)
+	_, _, err = plugin.PostLLMHook(clientIPTestContext("req-client-ip-off-no-pending"), nil, clientIPTestError())
+	require.NoError(t, err)
+
+	mcpCtx := clientIPTestContext("req-mcp-client-ip-off")
+	mcpCtx.SetValue(schemas.BifrostContextKeyMCPLogID, "mcp-client-ip-off")
+	toolName := "docs-search"
+	_, _, err = plugin.PreMCPHook(mcpCtx, &schemas.BifrostMCPRequest{
+		RequestType:                  schemas.MCPRequestTypeChatToolCall,
+		ChatAssistantMessageToolCall: &schemas.ChatAssistantMessageToolCall{Function: schemas.ChatAssistantMessageToolCallFunction{Name: &toolName, Arguments: `{}`}},
+	})
+	require.NoError(t, err)
+	result := `{"ok":true}`
+	_, _, err = plugin.PostMCPHook(mcpCtx, &schemas.BifrostMCPResponse{
+		ChatMessage: &schemas.ChatMessage{Role: schemas.ChatMessageRoleTool, Content: &schemas.ChatMessageContent{ContentStr: &result}},
+		ExtraFields: schemas.BifrostMCPResponseExtraFields{MCPRequestType: schemas.MCPRequestTypeChatToolCall, ClientName: "docs", ToolName: "search"},
+	}, nil)
+	require.NoError(t, err)
+	require.NoError(t, plugin.Cleanup())
+
+	for _, id := range []string{"req-client-ip-off", "req-client-ip-off-no-pending"} {
+		entry, err := store.FindByID(context.Background(), id)
+		require.NoError(t, err, id)
+		require.Nil(t, entry.ClientIP, id)
+		require.Nil(t, entry.ForwardedFor, id)
+	}
+	entry, err := store.FindByID(context.Background(), "req-client-ip-off")
+	require.NoError(t, err)
+	require.NotNil(t, entry.UserEmail, "user email does not depend on capture_client_ip")
+	mcpEntry, err := store.FindMCPToolLog(context.Background(), "mcp-client-ip-off")
+	require.NoError(t, err)
+	require.Nil(t, mcpEntry.ClientIP)
+	require.Nil(t, mcpEntry.ForwardedFor)
+	require.NotNil(t, mcpEntry.UserEmail)
+
+	relayPlugin := policyTestPlugin(nil, nil, true)
+	relayPlugin.writeQueue = make(chan *writeQueueEntry, 4)
+	relayCtx := policyCtx(false, nil)
+	relayCtx.SetValue(schemas.BifrostContextKeyRequestID, "req-relay-client-ip-off")
+	relayCtx.SetValue(schemas.BifrostContextKeyClientIP, "10.0.0.5")
+	relayCtx.SetValue(schemas.BifrostContextKeyForwardedFor, "203.0.113.5")
+	_, _, err = relayPlugin.PreRelayHook(relayCtx, &schemas.BifrostRelayRequest{RelayName: "tavily", Method: "POST", Path: "/search", RoutePath: "/search"})
+	require.NoError(t, err)
+	_, _, err = relayPlugin.PostRelayHook(relayCtx, &schemas.BifrostRelayResponse{RelayName: "tavily", StatusCode: 200}, nil)
+	require.NoError(t, err)
+	relayEntry := (<-relayPlugin.writeQueue).endpointLog
+	require.NotNil(t, relayEntry)
+	require.Nil(t, relayEntry.ClientIP)
+	require.Nil(t, relayEntry.ForwardedFor)
 }
