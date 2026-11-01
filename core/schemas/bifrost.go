@@ -331,6 +331,8 @@ const (
 	BifrostContextKeyParentMCPRequestID                  BifrostContextKey = "bf-parent-mcp-request-id"                         // string (parent request ID for nested tool calls from executeCode)
 	BifrostContextKeyStructuredOutputToolName            BifrostContextKey = "bifrost-structured-output-tool-name"              // string (to store the name of the structured output tool (set by bifrost))
 	BifrostContextKeyUserAgent                           BifrostContextKey = "bifrost-user-agent"                               // string (set by bifrost)
+	BifrostContextKeyClientIP                            BifrostContextKey = "bifrost-client-ip"                                // string (TCP peer IP of the caller; set by bifrost - DO NOT SET THIS MANUALLY)
+	BifrostContextKeyForwardedFor                        BifrostContextKey = "bifrost-forwarded-for"                            // string (leftmost X-Forwarded-For or X-Real-IP; caller-controlled, set by bifrost)
 	BifrostContextKeyApp                                 BifrostContextKey = "app"                                              // string (canonical app key such as claude-code; set by plugins)
 	BifrostContextKeySkipBudgetAndRateLimits             BifrostContextKey = "bifrost-skip-budget-and-rate-limits"              // bool (set by bifrost for read-only requests like list models that don't consume quota)
 	BifrostContextKeySessionContinuation                 BifrostContextKey = "bifrost-session-continuation"                     // bool (a billing unit of an already-admitted session, e.g. a GPT Live window; not checked or counted as a request)

@@ -1231,6 +1231,7 @@ func buildInitialLogEntry(pending *PendingLogData) *logstore.Log {
 		entry.RoutingEnginesUsed = pending.RoutingEnginesUsed
 	}
 	applyUserAgent(entry, pending.InitialData.UserAgent)
+	entry.ClientIP, entry.ForwardedFor = optionalString(pending.InitialData.ClientIP), optionalString(pending.InitialData.ForwardedFor)
 	applyApp(entry, pending.InitialData.App)
 	applyAgentCorrelationID(entry, pending.InitialData.AgentCorrelationID)
 	return entry
@@ -1271,6 +1272,7 @@ func buildCompleteLogEntryFromPending(pending *PendingLogData) *logstore.Log {
 		entry.RoutingEnginesUsed = pending.RoutingEnginesUsed
 	}
 	applyUserAgent(entry, pending.InitialData.UserAgent)
+	entry.ClientIP, entry.ForwardedFor = optionalString(pending.InitialData.ClientIP), optionalString(pending.InitialData.ForwardedFor)
 	applyApp(entry, pending.InitialData.App)
 	applyAgentCorrelationID(entry, pending.InitialData.AgentCorrelationID)
 	return entry
@@ -1292,6 +1294,8 @@ const (
 	maxPersistedAppLen                = 128
 	maxPersistedAgentCorrelationIDLen = 255
 	maxPersistedMCPToolNameLen        = 255 // mcp_tool_logs.tool_name; a resource read's URI is unbounded
+	maxPersistedClientIPLen           = 45  // client_ip; longest IPv6 text form
+	maxPersistedForwardedForLen       = 255 // forwarded_for; caller-controlled header
 )
 
 // clampString truncates s to at most max bytes. The columns are sized in

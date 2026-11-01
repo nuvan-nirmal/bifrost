@@ -300,6 +300,18 @@ func ExtraFieldsInHeaders(ctx *fasthttp.RequestCtx) bool {
 //	// Maxim tracing data, MCP filters, governance keys, API keys, cache settings,
 //	// session stickiness, and extra headers
 
+// ClientForwardedIP returns the leftmost X-Forwarded-For entry, else X-Real-IP, else "".
+// Both headers are caller-controlled, so the value is stored apart from the TCP peer address.
+func ClientForwardedIP(ctx *fasthttp.RequestCtx) string {
+	if xff := strings.TrimSpace(string(ctx.Request.Header.Peek("X-Forwarded-For"))); xff != "" {
+		if first, _, found := strings.Cut(xff, ","); found {
+			return strings.TrimSpace(first)
+		}
+		return xff
+	}
+	return strings.TrimSpace(string(ctx.Request.Header.Peek("X-Real-IP")))
+}
+
 func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, store HandlerStore) (*schemas.BifrostContext, context.CancelFunc) {
 	// "transport-context" overhead phase: building the request-scoped BifrostContext —
 	// child-context alloc, request-id resolution, and the full request-header iteration
@@ -851,6 +863,13 @@ func ConvertToBifrostContext(ctx *fasthttp.RequestCtx, store HandlerStore) (*sch
 		return true
 	})
 	bifrostCtx.SetValue(schemas.BifrostContextKeyRequestHeaders, allHeaders)
+
+	if ip := ctx.RemoteIP(); ip != nil && !ip.IsUnspecified() {
+		bifrostCtx.SetValue(schemas.BifrostContextKeyClientIP, ip.String())
+	}
+	if forwarded := ClientForwardedIP(ctx); forwarded != "" {
+		bifrostCtx.SetValue(schemas.BifrostContextKeyForwardedFor, forwarded)
+	}
 
 	// Session stickiness: an explicit x-bf-session-id wins, otherwise the
 	// harness's own session header applies, so Claude Code / Codex CLI /

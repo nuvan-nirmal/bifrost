@@ -115,6 +115,7 @@ func (p *LoggerPlugin) insertInitialLogEntry(
 	if data.App != "" {
 		entry.App = new(clampString(data.App, maxPersistedAppLen))
 	}
+	entry.ClientIP, entry.ForwardedFor = optionalString(data.ClientIP), optionalString(data.ForwardedFor)
 	return p.store.CreateIfNotExists(ctx, entry)
 }
 
