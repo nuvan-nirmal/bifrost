@@ -159,6 +159,20 @@ func (e *Executor) BuildRequest(ctx context.Context, tool *Tool, args map[string
 			}
 			path = strings.ReplaceAll(path, "{"+arg.Name+"}", segment)
 		case InQuery:
+			if arg.Template != "" {
+				entries, ok := value.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("query parameter %q takes an object mapping each key to its value", arg.ArgName)
+				}
+				placeholder := argNamePlaceholder.FindString(arg.Name)
+				for _, key := range sortedKeys(entries) {
+					if entries[key] == nil {
+						continue
+					}
+					query.Add(strings.Replace(arg.Name, placeholder, key, 1), stringify(entries[key], ","))
+				}
+				continue
+			}
 			addQueryValue(query, arg, value)
 		case InHeader:
 			name := http.CanonicalHeaderKey(arg.Name)

@@ -884,3 +884,24 @@ func TestBuildRequest_OptionalQuerystringRequiresItsFieldsWhenSent(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, "x", req.URL.Query().Get("q"))
 }
+
+// TestBuildRequest_TemplatedAndSanitizedQueryNames: a templated query name
+// (metadata_<key>) takes an object and sends one pair per entry; a sanitized
+// argument (filter[status] as filter_status_) is sent under its wire name.
+func TestBuildRequest_TemplatedAndSanitizedQueryNames(t *testing.T) {
+	ts, cap := newCaptureServer(t, nil)
+	spec := `{"openapi":"3.0.3","info":{"title":"t","version":"1"},"paths":{"/logs":{"get":{"operationId":"getLogs","parameters":[
+{"name":"metadata_<key>","in":"query","schema":{"type":"string"}},
+{"name":"filter[status]","in":"query","schema":{"type":"string"}}],"responses":{"200":{"description":"ok"}}}}}}`
+	exec, syn := inlineExecutor(t, ts, spec, nil)
+	tool := findTool(t, syn, "getLogs")
+	_, err := exec.Execute(context.Background(), tool, map[string]any{
+		"metadata":       map[string]any{"team": "search", "env": "prod"},
+		"filter_status_": "open",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "filter%5Bstatus%5D=open&metadata_env=prod&metadata_team=search", cap.query)
+
+	_, err = exec.BuildRequest(context.Background(), tool, map[string]any{"metadata": "team=search"})
+	require.ErrorContains(t, err, "metadata")
+}

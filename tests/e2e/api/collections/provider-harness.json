@@ -264431,6 +264431,66 @@
           }
         },
         {
+          "name": "openai mcp-openapi-spec preview gives every argument a name clients accept: metadata_<key> becomes an object, filter[status] is renamed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('openapi preview is a 200', function () {",
+                  "  pm.expect(pm.response.code, pm.response.text()).to.eql(200);",
+                  "});",
+                  "var body = pm.response.json();",
+                  "var tool = (body.tools || []).filter(function (t) { return t.name === 'listLogs'; })[0];",
+                  "pm.test('listLogs is a tool', function () {",
+                  "  pm.expect(tool, pm.response.text()).to.be.an('object');",
+                  "});",
+                  "var props = ((tool && tool.input_schema) || {}).properties || {};",
+                  "pm.test('every argument name matches the Anthropic API rule, or clients drop the tool', function () {",
+                  "  var bad = Object.keys(props).filter(function (n) { return !/^[a-zA-Z0-9_.-]{1,64}$/.test(n); });",
+                  "  pm.expect(bad, JSON.stringify(Object.keys(props))).to.eql([]);",
+                  "});",
+                  "pm.test('the templated metadata_<key> filter is one object argument mapping keys to values', function () {",
+                  "  pm.expect(props.metadata, JSON.stringify(Object.keys(props))).to.be.an('object');",
+                  "  pm.expect(props.metadata.type).to.eql('object');",
+                  "  pm.expect(props.metadata.additionalProperties.type).to.eql('string');",
+                  "});",
+                  "pm.test('filter[status] is offered as filter_status_', function () {",
+                  "  pm.expect(props, JSON.stringify(Object.keys(props))).to.have.property('filter_status_');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spec\": \"{\\n  \\\"openapi\\\": \\\"3.0.3\\\",\\n  \\\"info\\\": {\\n    \\\"title\\\": \\\"Harness Log API\\\",\\n    \\\"version\\\": \\\"1.0.0\\\"\\n  },\\n  \\\"servers\\\": [\\n    {\\n      \\\"url\\\": \\\"https://logs.example.com\\\"\\n    }\\n  ],\\n  \\\"paths\\\": {\\n    \\\"/logs\\\": {\\n      \\\"get\\\": {\\n        \\\"operationId\\\": \\\"listLogs\\\",\\n        \\\"summary\\\": \\\"List logs\\\",\\n        \\\"parameters\\\": [\\n          {\\n            \\\"name\\\": \\\"metadata_<key>\\\",\\n            \\\"in\\\": \\\"query\\\",\\n            \\\"description\\\": \\\"Filter on custom metadata; replace <key> with the metadata key.\\\",\\n            \\\"schema\\\": {\\n              \\\"type\\\": \\\"string\\\"\\n            }\\n          },\\n          {\\n            \\\"name\\\": \\\"filter[status]\\\",\\n            \\\"in\\\": \\\"query\\\",\\n            \\\"schema\\\": {\\n              \\\"type\\\": \\\"string\\\"\\n            }\\n          }\\n        ],\\n        \\\"responses\\\": {\\n          \\\"200\\\": {\\n            \\\"description\\\": \\\"ok\\\"\\n          }\\n        }\\n      }\\n    }\\n  }\\n}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mcp/openapi/preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mcp",
+                "openapi",
+                "preview"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "[EXPECT-400] openai mcp-openapi-spec preview of a non-OpenAPI document is a 400",
           "event": [
             {

@@ -135,6 +135,7 @@ type ArgBinding struct {
 	ArgName             string // property name in the tool input schema
 	Location            string // path | query | header | cookie | querystring
 	Name                string // wire parameter name
+	Template            string // query names with a <placeholder>: the argument is an object, one pair per entry
 	Required            bool
 	Explode             bool
 	Style               string
